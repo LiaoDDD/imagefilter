@@ -15,9 +15,10 @@ app = FastAPI(title="CSV Image Analysis API", root_path="/imagefilter")
 # 從環境變數中獲取 CSV 與結果檔案路徑（CSV 方式使用）
 CSV_FILE = os.getenv("CSV_FILE")
 RESULT_FILE = os.getenv("RESULT_FILE")
+INPUT_CACHE_FILE = os.getenv("INPUT_CACHE_FILE")
 
 # 初始化 DataProcessor 實例
-data_processor = DataProcessor(csv_file=CSV_FILE, result_file=RESULT_FILE)
+data_processor = DataProcessor(csv_file=CSV_FILE, result_file=RESULT_FILE, input_cache_file=INPUT_CACHE_FILE)
 
 # 定義 POST 輸入資料模型
 class InputRecord(BaseModel):
@@ -32,8 +33,7 @@ class InputData(BaseModel):
 async def startup_event():
     """
     應用啟動時：
-      - 若 RESULT_FILE 存在則讀取（CSV 處理結果），
-      - 否則通過 CSV 處理圖片數據生成結果並存檔。
+      - 判斷使否有csv處裡
     """
     try:
         await data_processor.init_data_if_needed()
@@ -46,14 +46,8 @@ async def analyze_csv(
     continuation_token: int = Query(0, ge=0, description="查詢索引 (起始筆數)")
 ):
     """
-    GET 接口：返回 CSV 處理後的圖片數據。
+    從 CSV 結果檔案讀取處理後的圖片資料並回傳
     返回格式統一為：
-    {
-      "results": [
-         { "row": <>, "key": <>, "url": <>, "tag": [ ... ] },
-         ...
-      ]
-    }
     """
     try:
         with open(RESULT_FILE, "r", encoding="utf-8") as f:
@@ -72,22 +66,15 @@ async def analyze_csv(
 @app.post("/analyze_images")
 async def analyze_images(input_data: InputData):
     """
-    POST 接口：接收使用者提交的 JSON 數據，格式例如：
-    {
-      "Data": [
-         { "row": 1, "key": "htl0001twin001", "url": "https://..." },
-         { "row": 2, "key": "htl0001twin001", "url": "https://..." }
-      ]
-    }
-    系統將對每條記錄透過 URL 下載並處理圖片，提取 width、height、ppi（width×height）及 aspect_ratio，
-    並針對相同 key（代表同一飯店）的記錄進行重複檢測，對於檢測到的重複圖片，在其 tag 列表中新增一個
-    { "type": "repeat", "name": "<canonical_url>" }。返回格式與 CSV 處理接口保持一致：
-    {
-      "results": [
-         { "row": <>, "key": <>, "url": <>, "tag": [ ... ] },
-         ...
-      ]
-    }
+    POST 接口：接收使用者提交的 JSON 數據座位input，格式需要正確。
+    對input進行處裡
+      1. 讀取緩存 (INPUT_CACHE_FILE) ，判斷每筆資料是否已處理過。
+         若已存在，則直接取用該筆資料中的 tag
+      2. 未處理過的則進行圖片處理並更新緩存。
+      3. 合併所有資料後，執行重複檢測，對重複圖片雙向補充標籤，
+         每筆重複記錄均列出其他重複圖片的 URL。
+      4. 刪除暫存的 phash 欄位後返回，且保持輸入順序與 row 不變。
+    回傳格式與 GET 接口一致。
     """
     if not input_data.Data:
         raise HTTPException(status_code=400, detail="未提供有效的 Data。")
