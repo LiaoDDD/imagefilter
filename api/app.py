@@ -82,4 +82,15 @@ async def analyze_images(input_data: InputData):
     results = await data_processor.process_input_data(input_data.Data)
     data = {"results": results}
     r_desc, r_code = API.get_r_desc_r_code(data)
+    
+    distinct_key = set()
+    for rec in input_data.Data:
+        key = rec.key
+        distinct_key.add(key)
+    
+    status_code = 201 if len(distinct_key) > 1 else 200
+
+    response = API.result_format(data, r_desc, r_code)
+    return JSONResponse(content=response, status_code=status_code)
+
     return API.result_format(data, r_desc, r_code)
