@@ -6,6 +6,7 @@ import imagehash
 import logging
 from tools.csv_processor import CSVProcessor
 from tools.image_processor import ImageProcessor
+from tools.object_processor import ObjectProcessor
 
 logging.basicConfig(level=logging.INFO)
 
@@ -251,4 +252,17 @@ class DataProcessor:
                 {"type": "ppi", "name": str(ppi)},
                 {"type": "aspect_ratio", "name": str(aspect_ratio)}
             ]
+        try:
+            response = requests.get(url)
+            img_array = np.frombuffer(response.content, np.uint8)
+            cv_image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            detected_objects = self.object_processor.process(cv_image)
+        except Exception as e:
+            logging.error(f"偵測異常:{e}")
+            detected_objects = []
+
+        custom_name = {"dining table": "table"}
+        for obj in detected_objects:
+            obj_tag = custom_name.get(obj, obj)
+            tags.append({"type": "object", "name": obj_tag})
         return {"row": row, "key": key, "url": url, "tag": tags, "phash": result.get("phash", "")}
