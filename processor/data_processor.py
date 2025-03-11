@@ -1,12 +1,15 @@
 import asyncio
 import json
-import os
 import aiohttp
 import imagehash
 import logging
+import numpy as np
+import cv2
+import requests
 from tools.csv_processor import CSVProcessor
 from tools.image_processor import ImageProcessor
 from tools.object_processor import ObjectProcessor
+from tools.exposure_processor import ExposureProcessor
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,6 +22,16 @@ class DataProcessor:
         self.result_file = result_file
         self.input_cache_file = input_cache_file
         self.image_processor = ImageProcessor()
+        self.object_processor = ObjectProcessor()
+        self.exposure_processor = ExposureProcessor()
+
+    async def init_data_if_needed(self):
+        try:
+            with open(self.result_file, "r", encoding="utf-8") as f:
+                json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            # CSV 結果不存在或解析失敗，則重新處理 CSV 資料
+            await self.process_csv_and_images()
 
     async def process_csv_and_images(self):
         """
@@ -92,9 +105,11 @@ class DataProcessor:
         """
         groups = {}
         for rec in records:
-            groups.setdefault(rec["key"], []).append(rec)
+            hotel_id = rec["key"].split("|")[0] if rec.get("key") else ""
+            groups.setdefault(hotel_id, []).append(rec)
+
         
-        for key, recs in groups.items():
+        for hotel_id, recs in groups.items():
             # 這裡建立排序用的複本，不修改原始記錄
             sorted_recs = sorted(recs, key=lambda x: x["row"])
             n = len(sorted_recs)
@@ -256,13 +271,31 @@ class DataProcessor:
             response = requests.get(url)
             img_array = np.frombuffer(response.content, np.uint8)
             cv_image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        except Exception as e:
+            logging.error(f"圖片下載失敗: {e}")
+            cv_image = None
+        
+        try:
             detected_objects = self.object_processor.process(cv_image)
         except Exception as e:
             logging.error(f"偵測異常:{e}")
             detected_objects = []
-
         custom_name = {"dining table": "table"}
         for obj in detected_objects:
             obj_tag = custom_name.get(obj, obj)
             tags.append({"type": "object", "name": obj_tag})
+
+        try:
+            exposure_result = self.exposure_processor.analyze(cv_image)
+            tags.append({"type": "exposure_status", "name": exposure_result["exposure_status"]})
+            tags.append({"type": "contrast_status", "name": exposure_result["contrast_status"]})
+        except Exception as e:
+            logging.error(f"曝光分析失敗: {e}")
+
+
         return {"row": row, "key": key, "url": url, "tag": tags, "phash": result.get("phash", "")}
+
+
+
+
+
