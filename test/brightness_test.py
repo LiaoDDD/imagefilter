@@ -6,27 +6,27 @@ def analyze_exposure_from_url(image_url):
 
     response = requests.get(image_url, timeout=10)
     if response.status_code != 200:
-        raise Exception("图片下载失败，状态码：" + str(response.status_code))
+        raise Exception("下載失敗：" + str(response.status_code))
     
     image_array = np.asarray(bytearray(response.content), dtype="uint8")
     image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
     if image is None:
-        raise Exception("图片解码失败")
+        raise Exception("失敗")
     
     
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
    
-    mean_brightness = np.mean(gray)        # 平均亮度
-    std_brightness = np.std(gray)           # 亮度标准差
+    mean_brightness = np.mean(gray)        
+    std_brightness = np.std(gray)           
     high_light_ratio = np.sum(gray > 200) / gray.size * 100  # 高亮像素比例
     low_light_ratio = np.sum(gray < 50) / gray.size * 100    # 低亮像素比例
-    exposure_index = mean_brightness / (std_brightness + 1e-5) # 曝光指数（暂未使用）
+    exposure_index = mean_brightness / (std_brightness + 1e-5) 
     
     if mean_brightness < 80 or low_light_ratio > 40:
         exposure_status = "過暗"
     elif mean_brightness > 180 or high_light_ratio > 40:
-        exposure_status = "過暗"
+        exposure_status = "過亮"
     else:
         exposure_status = "正常"
     
