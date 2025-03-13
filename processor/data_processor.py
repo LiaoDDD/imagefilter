@@ -10,11 +10,12 @@ from tools.csv_processor import CSVProcessor
 from tools.image_processor import ImageProcessor
 from tools.object_processor import ObjectProcessor
 from tools.exposure_processor import ExposureProcessor
+from tools.scene_processor import SceneProcessor
 
 logging.basicConfig(level=logging.INFO)
 
 class DataProcessor:
-    def __init__(self, csv_file: str = None, result_file: str = None, input_cache_file: str = None):
+    def __init__(self, csv_file: str = None, result_file: str = None, input_cache_file: str = None, scene_model_weight: str = None, scene_label_file: str = None):
         """
         初始化
         """
@@ -24,6 +25,10 @@ class DataProcessor:
         self.image_processor = ImageProcessor()
         self.object_processor = ObjectProcessor()
         self.exposure_processor = ExposureProcessor()
+        if scene_model_weight and scene_label_file:
+            self.scene_processor = SceneProcessor(scene_model_weight, scene_label_file)
+        else:
+            self.scene_processor = None
 
     async def init_data_if_needed(self):
         try:
@@ -278,13 +283,12 @@ class DataProcessor:
         try:
             detected_objects = self.object_processor.process(cv_image)
         except Exception as e:
-            logging.error(f"偵測異常:{e}")
+            logging.error(f"物件偵測異常:{e}")
             detected_objects = []
         custom_name = {"dining table": "table"}
         for obj in detected_objects:
             obj_tag = custom_name.get(obj, obj)
             tags.append({"type": "object", "name": obj_tag})
-
         try:
             exposure_result = self.exposure_processor.analyze(cv_image)
             tags.append({"type": "exposure_status", "name": exposure_result["exposure_status"]})
@@ -293,7 +297,17 @@ class DataProcessor:
             logging.error(f"曝光分析失敗: {e}")
 
 
+        if self.scene_processor is not None:
+            try:
+                scene_result = self.scene_processor.analyze(url)
+                if scene_result is not None:
+                    tags.append({"type": "scene", "name": scene_result["scene"]})
+            except Exception as e:
+                logging.error(f"場景分析失敗: {e}")
+
+
         return {"row": row, "key": key, "url": url, "tag": tags, "phash": result.get("phash", "")}
+
 
 
 
