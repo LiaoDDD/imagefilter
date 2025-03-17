@@ -15,12 +15,10 @@ class ImageProcessor:
         self.semaphore = asyncio.Semaphore(self.max_concurrent)
 
     async def fetch_image(self, session, url, retries=3):
-        headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; ImageProcessor/1.0; +http://yourdomain.com)"
-        }
+
         for attempt in range(retries):
             try:
-                async with session.get(url, headers=headers) as response:
+                async with session.get(url) as response:
                     if response.status == 200:
                         return await response.read()
                     else:
