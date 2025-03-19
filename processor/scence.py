@@ -50,7 +50,7 @@ class SceneProcessor:
         response = requests.get(image_url, timeout=10)
         response.raise_for_status()
         img = Image.open(BytesIO(response.content)).convert('RGB')
-        img_tensor = self.tfm(img).unsqueeze(0)
+        img_tensor = self.tfm(img).unsqueeze(0).to(device)
         with torch.no_grad():
             logits = self.model(img_tensor)
             probs = torch.softmax(logits, dim=1)
