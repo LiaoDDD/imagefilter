@@ -1,12 +1,13 @@
-import asyncio
 import os
 import json
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List
 from tools.data_processor import DataProcessor
 from dotenv import load_dotenv
 from utils.api import API
+import time
 
 load_dotenv()  # 載入 .env 檔案中的設定
 
@@ -16,9 +17,21 @@ app = FastAPI(title="CSV Image Analysis API", root_path="/imagefilter")
 CSV_FILE = os.getenv("CSV_FILE")
 RESULT_FILE = os.getenv("RESULT_FILE")
 INPUT_CACHE_FILE = os.getenv("INPUT_CACHE_FILE")
+SCENE_MODEL_WEIGHT = os.getenv("SCENE_MODEL_WEIGHT")
+SCENE_LABEL_FILE = os.getenv("SCENE_LABEL_FILE")
+LIGHTING_MODEL_PATH = os.getenv("LIGHTING_MODEL_PATH")
+LIGHTING_LABEL_FILE = os.getenv("LIGHTING_LABEL_FILE")
 
 # 初始化 DataProcessor 實例
-data_processor = DataProcessor(csv_file=CSV_FILE, result_file=RESULT_FILE, input_cache_file=INPUT_CACHE_FILE)
+data_processor = DataProcessor(
+    csv_file=CSV_FILE,
+    result_file=RESULT_FILE,
+    input_cache_file=INPUT_CACHE_FILE,
+    scene_model_weight=SCENE_MODEL_WEIGHT,
+    scene_label_file=SCENE_LABEL_FILE,
+    lighting_model_path=LIGHTING_MODEL_PATH,
+    lighting_label_file=LIGHTING_LABEL_FILE
+                )
 
 # 定義 POST 輸入資料模型
 class InputRecord(BaseModel):
@@ -61,12 +74,14 @@ async def analyze_csv(
     
     data = {"results": all_results}
     r_desc, r_code = API.get_r_desc_r_code(data)
-    return API.result_format(data, r_desc, r_code)
+    response = API.result_format(data, r_desc, r_code)
+    return JSONResponse(content=response, status_code=200)
 
 @app.post("/analyze_images")
 async def analyze_images(input_data: InputData):
+    start_time = time.perf_counter()
     """
-    POST 接口：接收使用者提交的 JSON 數據座位input，格式需要正確。
+    POST 接口：接收使用者提交的 JSON 數據座位input格式需要正確。
     對input進行處裡
       1. 讀取緩存 (INPUT_CACHE_FILE) ，判斷每筆資料是否已處理過。
          若已存在，則直接取用該筆資料中的 tag
@@ -82,15 +97,19 @@ async def analyze_images(input_data: InputData):
     results = await data_processor.process_input_data(input_data.Data)
     data = {"results": results}
     r_desc, r_code = API.get_r_desc_r_code(data)
-    
-    distinct_key = set()
+
+    distinct_hotel_ids = set()
     for rec in input_data.Data:
         key = rec.key
-        distinct_key.add(key)
+        hotel_id = key.split("+")[0] if key and "+" in key else key
+        distinct_hotel_ids.add(hotel_id)
     
-    status_code = 201 if len(distinct_key) > 1 else 200
+    # 如果有超過一個不同的 hotel id，則狀態碼設為 201
+    status_code = 306 if len(distinct_hotel_ids) > 1 else 200
 
     response = API.result_format(data, r_desc, r_code)
+    end_time = time.perf_counter()
+    total_time_sec = end_time - start_time
+    print(f"Total processing time: {total_time_sec:.2f} seconds")
     return JSONResponse(content=response, status_code=status_code)
 
-    return API.result_format(data, r_desc, r_code)
