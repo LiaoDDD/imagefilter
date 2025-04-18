@@ -11,11 +11,12 @@ from tools.image_processor import ImageProcessor
 from tools.object_processor import ObjectProcessor
 from tools.exposure_processor import ExposureProcessor
 from tools.scene_processor import SceneProcessor
+from tools.lighting_processor import LightingProcessor
 
 logging.basicConfig(level=logging.INFO)
 
 class DataProcessor:
-    def __init__(self, csv_file: str = None, result_file: str = None, input_cache_file: str = None, scene_model_weight: str = None, scene_label_file: str = None):
+    def __init__(self, csv_file: str = None, result_file: str = None, input_cache_file: str = None, scene_model_weight: str = None, scene_label_file: str = None,lighting_model_path: str = None, lighting_label_file: str = None):
         """
         初始化
         """
@@ -25,6 +26,7 @@ class DataProcessor:
         self.image_processor = ImageProcessor()
         self.object_processor = ObjectProcessor()
         self.exposure_processor = ExposureProcessor()
+        self.lighting_processor = LightingProcessor(lighting_model_path, lighting_label_file) if lighting_model_path and lighting_label_file else None
         if scene_model_weight and scene_label_file:
             self.scene_processor = SceneProcessor(scene_model_weight, scene_label_file)
         else:
@@ -54,11 +56,11 @@ class DataProcessor:
         if not records:
             raise Exception("CSV 中無有效圖片連結。")
         
-        # 處理 CSV 記錄中的圖片 URL
+        # 處理 CSV 中的圖片 URL
         urls = [record["url"] for record in records]
         results = await self.image_processor.process_images(urls)
         
-        # 合併 CSV 記錄與圖片處理結果，暫存 phash 用於重複檢測
+        # 合併 CSV 與圖片處理結果，暫存 phash 用於重複檢測
         combined = []
         for rec, proc in zip(records, results):
             if (proc.get("width") is None and proc.get("height") is None and proc.get("aspect_ratio") is None):
@@ -82,7 +84,7 @@ class DataProcessor:
                 "phash": proc.get("phash")  # 暫存欄位，用於重複檢測
             })
         
-        # 執行重複檢測（逐對比較），不修改原始 row
+        # 執行重複檢測，維持input row 一致
         combined = self._detect_duplicates(combined, threshold=5)
         for rec in combined:
             rec.pop("phash", None)
@@ -102,7 +104,7 @@ class DataProcessor:
     def _detect_duplicates(self, records: list, threshold: int) -> list:
         """
         對圖片進行比對
-          1. 將記錄依 key 分組（僅用於比對，不修改原始 row）。
+          1. 將記錄依 key 分組僅用於比對。
           2. 比對phash比對phash
              若距離 <= threshold 則認為兩筆記錄重複
              並在雙向 tag 列表中添加對方的 URL。
@@ -110,12 +112,11 @@ class DataProcessor:
         """
         groups = {}
         for rec in records:
-            hotel_id = rec["key"].split("|")[0] if rec.get("key") else ""
+            hotel_id = rec["key"].split("+")[0] if rec.get("key") else ""
             groups.setdefault(hotel_id, []).append(rec)
 
         
         for hotel_id, recs in groups.items():
-            # 這裡建立排序用的複本，不修改原始記錄
             sorted_recs = sorted(recs, key=lambda x: x["row"])
             n = len(sorted_recs)
             for i in range(n):
@@ -153,7 +154,7 @@ class DataProcessor:
 
     def _load_cache(self) -> dict:
         """
-        從 input_cache_file 中載入緩存，回傳以 URL 為鍵的字典。
+        從 input_cache_file 中載入緩存回傳以url為指標的字典。
         若檔案不存在或解析失敗，則回傳空字典。
         """
         if not self.input_cache_file:
@@ -305,8 +306,21 @@ class DataProcessor:
             except Exception as e:
                 logging.error(f"場景分析失敗: {e}")
 
+        if self.lighting_processor is not None:
+            try:
+                lighting_result = self.lighting_processor.predict_from_cv2(cv_image)
+                if lighting_result:
+                    tags.append({"type": "light_source", "name": lighting_result})
+            except Exception as e:
+                logging.error(f"光線分類失敗: {e}")
+
 
         return {"row": row, "key": key, "url": url, "tag": tags, "phash": result.get("phash", "")}
+
+
+
+
+
 
 
 
