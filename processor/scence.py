@@ -11,6 +11,7 @@ class SceneProcessor:
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
         self.threshold = threshold
         self.model, self.classes, self.tfm = self.load_model(model_weight, label_file, device)
 
@@ -50,7 +51,7 @@ class SceneProcessor:
         response = requests.get(image_url, timeout=10)
         response.raise_for_status()
         img = Image.open(BytesIO(response.content)).convert('RGB')
-        img_tensor = self.tfm(img).unsqueeze(0).to(device)
+        img_tensor = self.tfm(img).unsqueeze(0).to(self.device)
         with torch.no_grad():
             logits = self.model(img_tensor)
             probs = torch.softmax(logits, dim=1)
@@ -61,4 +62,3 @@ class SceneProcessor:
             return {"scene": self.classes[top1_id], "probability": top1_prob}
         else:
             return None
-
