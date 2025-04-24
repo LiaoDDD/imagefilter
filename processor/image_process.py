@@ -15,7 +15,6 @@ class ImageProcessor:
         self.semaphore = asyncio.Semaphore(self.max_concurrent)
 
     async def fetch_image(self, session, url, retries=3):
-
         for attempt in range(retries):
             try:
                 async with session.get(url) as response:
@@ -44,7 +43,8 @@ class ImageProcessor:
                 "aspect_ratio": None,
                 "dpi": None,
                 "extension": ext,
-                "phash": None
+                "phash": None,
+                "raw": None
             }
         try:
             with Image.open(BytesIO(image_data)) as img:
@@ -66,7 +66,8 @@ class ImageProcessor:
                     "aspect_ratio": aspect_ratio,
                     "dpi": dpi,
                     "extension": ext,
-                    "phash": phash
+                    "phash": phash,
+                    "raw": image_data
                 }
         except Exception as e:
             logging.error(f"處理圖片失敗：{url}, 錯誤：{e}")
@@ -77,7 +78,8 @@ class ImageProcessor:
                 "aspect_ratio": None,
                 "dpi": None,
                 "extension": ext,
-                "phash": None
+                "phash": None,
+                "raw": None
             }
 
     async def process_images(self, urls: list):
@@ -91,3 +93,4 @@ class ImageProcessor:
                 result = await task
                 results.append(result)
         return results
+
