@@ -5,7 +5,6 @@ import imagehash
 import logging
 import numpy as np
 import cv2
-import requests
 from tools.csv_processor import CSVProcessor
 from tools.image_processor import ImageProcessor
 from tools.object_processor import ObjectProcessor
@@ -273,12 +272,15 @@ class DataProcessor:
                 {"type": "ppi", "name": str(ppi)},
                 {"type": "aspect_ratio", "name": str(aspect_ratio)}
             ]
+        #raw 轉 cv2    
         try:
-            response = requests.get(url)
-            img_array = np.frombuffer(response.content, np.uint8)
-            cv_image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            if result.get("raw"):
+                img_array = np.frombuffer(result["raw"], np.uint8)
+                cv_image  = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            else:
+                cv_image = None
         except Exception as e:
-            logging.error(f"圖片下載失敗: {e}")
+            logging.error(f"raw 轉 cv2 失敗: {e}")
             cv_image = None
         
         try:
@@ -316,6 +318,11 @@ class DataProcessor:
 
 
         return {"row": row, "key": key, "url": url, "tag": tags, "phash": result.get("phash", "")}
+
+
+
+
+
 
 
 
