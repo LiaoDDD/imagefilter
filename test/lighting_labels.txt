@@ -1,0 +1,4 @@
+no_light
+natural_light
+indoor_light
+mixed_light
