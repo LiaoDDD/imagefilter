@@ -9,6 +9,7 @@ from processor.logging_config import init_logger
 from dotenv import load_dotenv
 from utils.api import API
 import time
+main_logger = init_logger()
 
 load_dotenv()  # 載入 .env 檔案中的設定
 
